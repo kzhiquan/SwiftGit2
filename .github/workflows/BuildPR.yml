@@ -43,3 +43,14 @@ jobs:
 #        run: script/cibuild
       - name: Build project
         run: xcodebuild -workspace SwiftGit2.xcworkspace -scheme SwiftGit2-OSX -archivePath ./SwiftGit2 archive ARCHS="${{ env.ARCHITECTURE }}"
+      - name: Zip archive output
+        run: |
+          mkdir -p output
+          zip -r output/SwiftGit2.xcarchive.zip SwiftGit2.xcarchive
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SwiftGit2-${{ matrix.xcode }}-${{ matrix.os }}
+          path: output/SwiftGit2.xcarchive.zip
+
