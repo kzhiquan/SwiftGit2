@@ -1,9 +1,8 @@
-name: macOS SwiftGit2 Build
+name: Build SwiftGit2 Framework
 
 on:
   push:
-    branches:
-      - master
+    branches: [ master ]
   pull_request:
 
 jobs:
@@ -12,56 +11,57 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        xcode: [ Xcode_14.3, Xcode_15.2.0 ]
         os: [ macos-13 ]
+        xcode: [ Xcode_14.3 ]
         include:
-          - xcode: Xcode_15.4
-            os: macos-14
-          - xcode: Xcode_16.2
-            os: macos-14
+          - os: macos-14
+            xcode: Xcode_15.4
+          - os: macos-14
+            xcode: Xcode_16.2
 
     steps:
-      - name: Checkout
+      - name: List Xcodes
+        run: ls /Applications | grep Xcode
+
+      - name: Checkout Source
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
+          
 
-      - name: Set Xcode Version
+      - name: Select Xcode Version
         run: sudo xcode-select -s /Applications/${{ matrix.xcode }}.app
 
-      - name: Update libgit2
-        run: script/update_libgit2
+      - name: Get Architecture
+        run: echo "ARCHITECTURE=$(uname -m)" >> $GITHUB_ENV
 
-      - name: Bootstrap
-        run: script/bootstrap
+      - name: Update Dependencies
+        run: |
+          ./script/update_libgit2
+          ./script/bootstrap
 
-      - name: Archive macOS (arm64 + x86_64)
+      - name: Build SwiftGit2.framework
         run: |
           xcodebuild archive \
-            -workspace SwiftGit2.xcworkspace \
-            -scheme SwiftGit2-OSX \
-            -archivePath ./archives/macos \
+            -scheme SwiftGit2 \
+            -archivePath SwiftGit2.xcarchive \
             -destination 'generic/platform=macOS' \
             SKIP_INSTALL=NO \
             BUILD_LIBRARY_FOR_DISTRIBUTION=YES \
-            ARCHS='arm64 x86_64'
+            ENABLE_LIBRARY_EVOLUTION=YES \
+            ARCHS="arm64 x86_64" \
+            ONLY_ACTIVE_ARCH=NO
 
-      - name: Create XCFramework (macOS only)
+      - name: Export Built Framework
         run: |
-          xcodebuild -create-xcframework \
-            -framework ./archives/macos.xcarchive/Products/Library/Frameworks/SwiftGit2.framework \
-            -debug-symbols ./archives/macos.xcarchive/dSYMs/SwiftGit2.framework.dSYM \
-            -output SwiftGit2.xcframework
+          mkdir output
+          cp -R SwiftGit2.xcarchive/Products/Library/Frameworks/SwiftGit2.framework output/
+          cp -R SwiftGit2.xcarchive/dSYMs/SwiftGit2.framework.dSYM output/ || true
+          zip -ry output/SwiftGit2.framework.zip output/SwiftGit2.framework
 
-      - name: Zip xcframework
-        run: |
-          mkdir -p output
-          zip -r output/SwiftGit2.xcframework.zip SwiftGit2.xcframework
-
-      - name: Upload Artifact
+      - name: Upload Framework Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SwiftGit2-xcframework-macos-${{ matrix.xcode }}
-          path: output/SwiftGit2.xcframework.zip
-
+          name: SwiftGit2-${{ matrix.xcode }}-${{ matrix.os }}
+          path: output/SwiftGit2.framework.zip
